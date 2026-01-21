@@ -65,7 +65,7 @@ export const workoutExercises = mysqlTable("workout_exercises", {
   exerciseId: int("exerciseId").notNull(),
   orderIndex: int("orderIndex").notNull(), // order in workout
   targetSets: int("targetSets").default(3),
-  targetReps: int("targetReps").default(10),
+  targetReps: varchar("targetReps", { length: 20 }).default("10"),
   restSeconds: int("restSeconds"), // exercise-specific rest time (null = no timer)
   workoutTimerSeconds: int("workoutTimerSeconds"), // optional endurance timer (null = not timed)
   notes: text("notes"),

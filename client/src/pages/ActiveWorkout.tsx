@@ -50,6 +50,7 @@ export default function ActiveWorkout() {
   const [isRestTimerActive, setIsRestTimerActive] = useState(false);
   const [isWorkoutTimerActive, setIsWorkoutTimerActive] = useState(false);
   const [isDoubleRest, setIsDoubleRest] = useState(false);
+  const [doubledSets, setDoubledSets] = useState<Set<string>>(new Set());
 
   // Input state
   const [weightInput, setWeightInput] = useState("");
@@ -72,6 +73,12 @@ export default function ActiveWorkout() {
   // Get previous logs for current exercise
   const currentExercise = workoutData?.exercises[currentExerciseIndex];
   const { data: previousLogs } = trpc.sessions.getPreviousLogs.useQuery(
+    { exerciseId: currentExercise?.exercise.id! },
+    { enabled: !!currentExercise?.exercise.id && isAuthenticated }
+  );
+
+  // Get personal record for current exercise
+  const { data: personalRecord } = trpc.exercises.getPersonalRecord.useQuery(
     { exerciseId: currentExercise?.exercise.id! },
     { enabled: !!currentExercise?.exercise.id && isAuthenticated }
   );
@@ -101,7 +108,6 @@ export default function ActiveWorkout() {
         setRestTimeRemaining((prev) => {
           if (prev === null || prev <= 1) {
             setIsRestTimerActive(false);
-            setIsDoubleRest(false);
             // Play sound
             try {
               const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQwAHIjeli0A");
@@ -150,6 +156,20 @@ export default function ActiveWorkout() {
 
     const weight = weightInput ? parseFloat(weightInput) : null;
     const reps = repsInput ? parseInt(repsInput) : null;
+
+    // Check if this is a PR
+    if (completed && weight && reps && personalRecord) {
+      const prWeight = personalRecord.weight || 0;
+      const prReps = personalRecord.reps || 0;
+      const isNewPR = weight > prWeight || (weight === prWeight && reps > prReps);
+      
+      if (isNewPR) {
+        toast.success("🎉 New Personal Record!", {
+          description: `${weight} lbs × ${reps} reps`,
+          duration: 5000,
+        });
+      }
+    }
 
     // Save to local state
     const exerciseId = currentExercise.exercise.id;
@@ -212,9 +232,11 @@ export default function ActiveWorkout() {
   };
 
   const handleDoubleRest = () => {
-    if (restTimeRemaining !== null && !isDoubleRest) {
-      setRestTimeRemaining((prev) => (prev || 0) * 2);
-      setIsDoubleRest(true);
+    const setKey = `${currentExerciseIndex}-${currentSet}`;
+    if (restTimeRemaining !== null && !doubledSets.has(setKey)) {
+      const maxRestTime = currentExercise?.workoutExercise.restSeconds || 0;
+      setRestTimeRemaining(maxRestTime * 2);
+      setDoubledSets(prev => new Set(prev).add(setKey));
       toast.info("Rest time doubled!");
     }
   };
@@ -325,10 +347,10 @@ export default function ActiveWorkout() {
               <Button 
                 size="lg"
                 onClick={handleDoubleRest}
-                disabled={isDoubleRest}
-                className={isDoubleRest ? "opacity-50" : ""}
+                disabled={doubledSets.has(`${currentExerciseIndex}-${currentSet}`)}
+                className={doubledSets.has(`${currentExerciseIndex}-${currentSet}`) ? "opacity-50" : ""}
               >
-                {isDoubleRest ? "Extended" : "Double Rest"}
+                {doubledSets.has(`${currentExerciseIndex}-${currentSet}`) ? "Extended" : "Double Rest"}
               </Button>
             </div>
           </div>
@@ -412,6 +434,19 @@ export default function ActiveWorkout() {
               </Card>
             )}
 
+            {/* Personal Record */}
+            {personalRecord && (
+              <Card className="p-3 bg-primary/10 border-primary/20 mb-4">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-lg">🏆</span>
+                  <span className="text-muted-foreground">Your PR:</span>
+                  <span className="text-primary font-bold">
+                    {personalRecord.weight ? `${personalRecord.weight} lbs` : "—"} × {personalRecord.reps || "—"} reps
+                  </span>
+                </div>
+              </Card>
+            )}
+
             {/* Input Section */}
             <Card className="p-4 bg-card border-border mb-4">
               <div className="grid grid-cols-2 gap-4 mb-4">
@@ -429,7 +464,7 @@ export default function ActiveWorkout() {
                   <label className="text-sm text-muted-foreground mb-1 block">Reps</label>
                   <Input
                     type="number"
-                    placeholder={targetReps.toString()}
+                    placeholder={targetReps}
                     value={repsInput}
                     onChange={(e) => setRepsInput(e.target.value)}
                     className="text-2xl font-bold h-14 text-center"

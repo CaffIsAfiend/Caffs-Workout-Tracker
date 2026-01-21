@@ -19,7 +19,7 @@ import {
   Pencil
 } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Select,
@@ -58,6 +58,7 @@ const categoryOptions = [
 export default function Exercises() {
   const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [quickCreateName, setQuickCreateName] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showExerciseDetail, setShowExerciseDetail] = useState<number | null>(null);
@@ -70,6 +71,15 @@ export default function Exercises() {
     imageUrl: "",
     videoUrl: "",
   });
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+
+  // Handle quick create from search
+  useEffect(() => {
+    if (quickCreateName && showCreateDialog) {
+      setNewExercise(prev => ({ ...prev, name: quickCreateName }));
+      setQuickCreateName("");
+    }
+  }, [quickCreateName, showCreateDialog]);
 
   const { data: exercises, isLoading, refetch } = trpc.exercises.list.useQuery(
     categoryFilter && categoryFilter !== "all" ? { category: categoryFilter } : undefined,
@@ -85,6 +95,8 @@ export default function Exercises() {
       toast.error("Failed to sync exercises");
     }
   });
+
+  const uploadMedia = trpc.exercises.uploadMedia.useMutation();
 
   const createExercise = trpc.exercises.create.useMutation({
     onSuccess: () => {
@@ -119,6 +131,35 @@ export default function Exercises() {
   ) || [];
 
   const selectedExercise = exercises?.find(e => e.id === showExerciseDetail);
+
+  const handleFileUpload = async (file: File, type: 'image' | 'video') => {
+    setUploadingMedia(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string;
+        const base64Data = base64.split(',')[1];
+        
+        const result = await uploadMedia.mutateAsync({
+          fileName: file.name,
+          fileData: base64Data,
+          contentType: file.type,
+        });
+
+        if (type === 'image') {
+          setNewExercise({ ...newExercise, imageUrl: result.url });
+        } else {
+          setNewExercise({ ...newExercise, videoUrl: result.url });
+        }
+        toast.success(`${type === 'image' ? 'Image' : 'Video'} uploaded!`);
+        setUploadingMedia(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      toast.error("Failed to upload file");
+      setUploadingMedia(false);
+    }
+  };
 
   const handleCreateExercise = () => {
     if (!newExercise.name.trim()) {
@@ -233,6 +274,17 @@ export default function Exercises() {
                 </Button>
               </div>
             )}
+            {searchQuery && exercises && exercises.length > 0 && (
+              <Button 
+                onClick={() => {
+                  setQuickCreateName(searchQuery);
+                  setShowCreateDialog(true);
+                }}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Create "{searchQuery}"
+              </Button>
+            )}
           </Card>
         ) : (
           <div className="space-y-2">
@@ -335,17 +387,62 @@ export default function Exercises() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Image/GIF URL (optional)</Label>
+              <Label>Image/GIF (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file, 'image');
+                  }}
+                  disabled={uploadingMedia}
+                  className="flex-1"
+                />
+                {newExercise.imageUrl && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setNewExercise({ ...newExercise, imageUrl: "" })}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
+              {newExercise.imageUrl && (
+                <img src={newExercise.imageUrl} alt="Preview" className="w-full h-32 object-cover rounded-lg" />
+              )}
               <Input
-                placeholder="https://..."
+                placeholder="Or paste URL: https://..."
                 value={newExercise.imageUrl}
                 onChange={(e) => setNewExercise({ ...newExercise, imageUrl: e.target.value })}
               />
             </div>
             <div className="space-y-2">
-              <Label>Video URL (optional)</Label>
+              <Label>Video (optional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="file"
+                  accept="video/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file, 'video');
+                  }}
+                  disabled={uploadingMedia}
+                  className="flex-1"
+                />
+                {newExercise.videoUrl && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setNewExercise({ ...newExercise, videoUrl: "" })}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
               <Input
-                placeholder="https://..."
+                placeholder="Or paste URL: https://..."
                 value={newExercise.videoUrl}
                 onChange={(e) => setNewExercise({ ...newExercise, videoUrl: e.target.value })}
               />

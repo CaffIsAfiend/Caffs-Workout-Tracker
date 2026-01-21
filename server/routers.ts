@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import axios from "axios";
+import { storagePut } from "./storage";
 
 // Category mapping from wger API to our categories
 const wgerCategoryMap: Record<number, string> = {
@@ -168,6 +169,30 @@ export const appRouter = router({
       .input(z.object({ exerciseId: z.number(), limit: z.number().optional() }))
       .query(async ({ ctx, input }) => {
         return db.getExerciseHistory(ctx.user.id, input.exerciseId, input.limit);
+      }),
+
+    uploadMedia: protectedProcedure
+      .input(z.object({
+        fileName: z.string(),
+        fileData: z.string(), // base64 encoded
+        contentType: z.string(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const buffer = Buffer.from(input.fileData, 'base64');
+          const key = `exercises/${ctx.user.id}/${Date.now()}-${input.fileName}`;
+          const result = await storagePut(key, buffer, input.contentType);
+          return { url: result.url };
+        } catch (error) {
+          console.error("Failed to upload media:", error);
+          throw new Error("Failed to upload media");
+        }
+      }),
+
+    getPersonalRecord: protectedProcedure
+      .input(z.object({ exerciseId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        return db.getPersonalRecord(ctx.user.id, input.exerciseId);
       }),
   }),
 

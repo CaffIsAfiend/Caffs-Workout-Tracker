@@ -392,3 +392,54 @@ export async function getExerciseHistory(userId: number, exerciseId: number, lim
   .orderBy(desc(workoutSessions.startedAt))
   .limit(limit);
 }
+
+export async function getPersonalRecord(userId: number, exerciseId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Get all completed logs for this exercise
+  const logs = await db.select({
+    weight: exerciseLogs.weight,
+    reps: exerciseLogs.reps,
+  })
+  .from(exerciseLogs)
+  .innerJoin(workoutSessions, eq(exerciseLogs.sessionId, workoutSessions.id))
+  .where(and(
+    eq(workoutSessions.userId, userId),
+    eq(exerciseLogs.exerciseId, exerciseId),
+    eq(exerciseLogs.completed, true)
+  ));
+
+  if (logs.length === 0) return null;
+
+  // Calculate outlier threshold using IQR method
+  const weights = logs.map(l => l.weight || 0).filter(w => w > 0).sort((a, b) => a - b);
+  if (weights.length === 0) return null;
+
+  // Calculate Q1, Q3, and IQR
+  const q1Index = Math.floor(weights.length * 0.25);
+  const q3Index = Math.floor(weights.length * 0.75);
+  const q1 = weights[q1Index];
+  const q3 = weights[q3Index];
+  const iqr = q3 - q1;
+  const upperBound = q3 + (1.5 * iqr);
+
+  // Filter out outliers and find max
+  const validWeights = logs.filter(l => {
+    const w = l.weight || 0;
+    return w > 0 && w <= upperBound;
+  });
+
+  if (validWeights.length === 0) return null;
+
+  // Find the record with highest weight
+  const pr = validWeights.reduce((max, current) => {
+    const currentWeight = current.weight || 0;
+    const maxWeight = max.weight || 0;
+    if (currentWeight > maxWeight) return current;
+    if (currentWeight === maxWeight && (current.reps || 0) > (max.reps || 0)) return current;
+    return max;
+  });
+
+  return pr;
+}

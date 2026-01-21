@@ -51,7 +51,7 @@ interface WorkoutExerciseItem {
   exerciseId: number;
   exerciseName: string;
   targetSets: number;
-  targetReps: number;
+  targetReps: string;
   restSeconds: number | null;
   workoutTimerSeconds: number | null;
 }
@@ -108,7 +108,7 @@ export default function WorkoutBuilder() {
         exerciseId: e.exercise.id,
         exerciseName: e.exercise.name,
         targetSets: e.workoutExercise.targetSets || 3,
-        targetReps: e.workoutExercise.targetReps || 10,
+        targetReps: e.workoutExercise.targetReps || "10",
         restSeconds: e.workoutExercise.restSeconds,
         workoutTimerSeconds: e.workoutExercise.workoutTimerSeconds,
       })));
@@ -120,7 +120,7 @@ export default function WorkoutBuilder() {
       exerciseId: exercise.id,
       exerciseName: exercise.name,
       targetSets: 3,
-      targetReps: 10,
+      targetReps: "10",
       restSeconds: null,
       workoutTimerSeconds: null,
     }]);
@@ -319,17 +319,28 @@ export default function WorkoutBuilder() {
                         <Label className="text-xs text-muted-foreground">Sets</Label>
                         <Input
                           type="number"
-                          value={exercise.targetSets}
-                          onChange={(e) => handleUpdateExercise(index, { targetSets: parseInt(e.target.value) || 0 })}
+                          value={exercise.targetSets === 0 ? "" : exercise.targetSets}
+                          onChange={(e) => handleUpdateExercise(index, { targetSets: e.target.value === "" ? 0 : parseInt(e.target.value) })}
+                          onBlur={(e) => {
+                            if (e.target.value === "") {
+                              handleUpdateExercise(index, { targetSets: 0 });
+                            }
+                          }}
                           className="h-9"
                         />
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Reps</Label>
+                        <Label className="text-xs text-muted-foreground">Reps (or range)</Label>
                         <Input
-                          type="number"
+                          type="text"
+                          placeholder="e.g., 10 or 8-12"
                           value={exercise.targetReps}
-                          onChange={(e) => handleUpdateExercise(index, { targetReps: parseInt(e.target.value) || 0 })}
+                          onChange={(e) => handleUpdateExercise(index, { targetReps: e.target.value })}
+                          onBlur={(e) => {
+                            if (e.target.value === "") {
+                              handleUpdateExercise(index, { targetReps: "10" });
+                            }
+                          }}
                           className="h-9"
                         />
                       </div>
@@ -421,19 +432,32 @@ export default function WorkoutBuilder() {
               <p className="text-muted-foreground mb-4">
                 {availableExercises?.length === 0 
                   ? "No exercises loaded yet" 
-                  : "No exercises found"}
+                  : `No exercises found for "${searchQuery}"`}
               </p>
-              {availableExercises?.length === 0 && (
-                <Button 
-                  onClick={() => syncExercises.mutate()}
-                  disabled={syncExercises.isPending}
-                >
-                  {syncExercises.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : null}
-                  Load Exercise Library
-                </Button>
-              )}
+              <div className="flex gap-2 justify-center">
+                {availableExercises?.length === 0 && (
+                  <Button 
+                    onClick={() => syncExercises.mutate()}
+                    disabled={syncExercises.isPending}
+                  >
+                    {syncExercises.isPending ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : null}
+                    Load Exercise Library
+                  </Button>
+                )}
+                {searchQuery && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setLocation("/exercises");
+                    }}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create "{searchQuery}"
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="space-y-2 overflow-y-auto max-h-[calc(80vh-140px)]">
